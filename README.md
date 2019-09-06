@@ -17,6 +17,7 @@ on effective use of DeepState.
 * [Fuzzing an API with DeepState (Part 1)](https://blog.trailofbits.com/2019/01/22/fuzzing-an-api-with-deepstate-part-1)
 * [Fuzzing an API with DeepState (Part 2)](https://blog.trailofbits.com/2019/01/23/fuzzing-an-api-with-deepstate-part-2)
 * [Fuzzing Unit Tests with DeepState and Eclipser](https://blog.trailofbits.com/2019/05/31/fuzzing-unit-tests-with-deepstate-and-eclipser)
+* [DeepState Now Supports Ensemble Fuzzing](https://blog.trailofbits.com/2019/09/03/deepstate-now-supports-ensemble-fuzzing/)
 
 ## Overview of Features
 
@@ -28,7 +29,8 @@ on effective use of DeepState.
     * Work around show-stopper bugs
     * Find out which tool works best for your code under test
     * Different tools find different bugs/vulnerabilities
-    * Fair way to benchmark/bakeoff tools
+    * Fair way to benchmark/bakeoff tools with fuzzer front-end API
+    * Ensemble/parallel fuzz to maximimize coverage and bug discovery potential
 * Provides test replay for regression plus effective automatic test case reduction to aid debugging
 * Supports API-sequence generation with extensions to Google Test interface
   * Concise readable way (OneOf) to say "run one of these blocks of code"
@@ -165,7 +167,10 @@ file and CMakeLists.txt show DeepState usage.  Another extensive
 example is a [differential tester that compares Google's leveldb and
 Facebook's rocksdb](https://github.com/agroce/testleveldb).
 
-## Example Code
+We have also implemented [deepstate-test-suite](https://github.com/trailofbits/deepstate-test-suite),
+which supports software libraries with DeepState dropped in for unit testing.
+
+### Example Code
 
 ```cpp
 #include <deepstate/DeepState.hpp>
@@ -274,7 +279,7 @@ go into the `$DEEPSTATE/build/examples` directory and try:
 deepstate-angr ./Runlen
 ```
 
-or
+or with the built-in fuzzer:
 
 ```shell
 ./Runlen --fuzz --exit_on_fail
@@ -290,76 +295,19 @@ CRITICAL: /Users/alex/deepstate/examples/Runlen.cpp(60): ORIGINAL: '91c499', ENC
 ERROR: Failed: Runlength_EncodeDecode
 ```
 
-If you're using the DeepState docker, it's easy to also try libFuzzer
-and AFL on the Runlen example:
+## Testing with Symbolic Execution
+
+DeepState currently supports two symbolic executors: [Manticore](https://github.com/trailofbits/manticore) and
+[Angr](https://github.com/angr/angr):
 
 ```shell
-mkdir libfuzzer_runlen
-./Runlen_LF libfuzzer_runlen -max_total_time=30
-./Runlen --input_test_files_dir libfuzzer_runlen
+deepstate-angr ./MyTest
+deepstate-manticore ./MyTest
 ```
 
-And you'll see a number of failures, e.g.:
-```
-WARNING: No test specified, defaulting to last test defined (Runlength_EncodeDecode)
-CRITICAL: /home/user/deepstate/examples/Runlen.cpp(60): ORIGINAL: '4af4aa', ENCODED: '4AaAfA4AaA', ROUNDTRIP: '4af4a'
-ERROR: Failed: Runlength_EncodeDecode
-ERROR: Test case libfuzzer_runlen//9e266f6cb627ce3bb7d717a6e569ade6b3633f23 failed
-CRITICAL: /home/user/deepstate/examples/Runlen.cpp(60): ORIGINAL: 'aaaaaa', ENCODED: 'aA', ROUNDTRIP: 'a'
-ERROR: Failed: Runlength_EncodeDecode
-ERROR: Test case libfuzzer_runlen//d8fc60ccdd8f555c1858b9f0820f263e3d2b58ec failed
-CRITICAL: /home/user/deepstate/examples/Runlen.cpp(60): ORIGINAL: '4aaa', ENCODED: '4AaA', ROUNDTRIP: '4a'
-ERROR: Failed: Runlength_EncodeDecode
-ERROR: Test case libfuzzer_runlen//3177c75208f2d35399842196dc8093243d5a8243 failed
-CRITICAL: /home/user/deepstate/examples/Runlen.cpp(60): ORIGINAL: 'aaa', ENCODED: 'aA', ROUNDTRIP: 'a'
-ERROR: Failed: Runlength_EncodeDecode
-ERROR: Test case libfuzzer_runlen//9842926af7ca0a8cca12604f945414f07b01e13d failed
-CRITICAL: /home/user/deepstate/examples/Runlen.cpp(60): ORIGINAL: 'aaa', ENCODED: 'aA', ROUNDTRIP: 'a'
-ERROR: Failed: Runlength_EncodeDecode
-ERROR: Test case libfuzzer_runlen//85e53271e14006f0265921d02d4d736cdc580b0b failed
-CRITICAL: /home/user/deepstate/examples/Runlen.cpp(60): ORIGINAL: 'aaaaa', ENCODED: 'aA', ROUNDTRIP: 'a'
-ERROR: Failed: Runlength_EncodeDecode
-ERROR: Test case libfuzzer_runlen//241cbd6dfb6e53c43c73b62f9384359091dcbf56 failed
-CRITICAL: /home/user/deepstate/examples/Runlen.cpp(60): ORIGINAL: 'aa', ENCODED: 'aA', ROUNDTRIP: 'a'
-ERROR: Failed: Runlength_EncodeDecode
-ERROR: Test case libfuzzer_runlen//05a79f06cf3f67f726dae68d18a2290f6c9a50c9 failed
-CRITICAL: /home/user/deepstate/examples/Runlen.cpp(60): ORIGINAL: '25aaaa', ENCODED: '2A5AaA', ROUNDTRIP: '25a'
-ERROR: Failed: Runlength_EncodeDecode
-ERROR: Test case libfuzzer_runlen//419c3b754bacd6fc14ff9a932c5e2089d6dfcab5 failed
-CRITICAL: /home/user/deepstate/examples/Runlen.cpp(60): ORIGINAL: 'aaaa', ENCODED: 'aA', ROUNDTRIP: 'a'
-ERROR: Failed: Runlength_EncodeDecode
-ERROR: Test case libfuzzer_runlen//bb589d0621e5472f470fa3425a234c74b1e202e8 failed
-CRITICAL: /home/user/deepstate/examples/Runlen.cpp(60): ORIGINAL: '97aa', ENCODED: '9A7AaA', ROUNDTRIP: '97a'
-ERROR: Failed: Runlength_EncodeDecode
-ERROR: Test case libfuzzer_runlen//ca61c43b0e3ff0a8eccf3136996c9f1d9bfd627c failed
-INFO: Ran 16 tests; 10 tests failed
-```
+## Testing with Fuzzing
 
-Using AFL is similarly easy:
-
-```shell
-mkdir afl_seeds
-echo "ok" >& seeds/seed
-afl-fuzz -i seeds -o afl_runlen -- ./Runlen_AFL --input_test_file @@ --no_fork --abort_on_fail
-```
-
-You'll have to stop this with Ctrl-C.  The `afl_runlen/crashes`
-directory will contain crashing inputs AFL found.
-
-## Log Levels
-
-By default, DeepState is not very verbose about testing activity,
-other than failing tests.  The `--min_log_level` argument lowers the
-threshold for output, with 0 = `DEBUG`, 1 = `TRACE` (output from the
-tests, including from `printf`), 2 = INFO (DeepState messages, the default), 3 = `WARNING`,
-4 = `ERROR`, 5 = `EXTERNAL` (output from other programs such as
-libFuzzer), and 6 = `CRITICAL` messages.  Lowering the `min_log_level` can be very
-useful for understanding what a DeepState harness is actually doing;
-often, setting `--min_log_level 1` in either fuzzing or symbolic
-execution will give sufficient information to debug your test harness.
-
-
-## Built-In Fuzzer
+### Built-In Fuzzer
 
 Every DeepState executable provides a simple built-in fuzzer that
 generates tests using completely random data.  Using this fuzzer is as
@@ -377,16 +325,7 @@ Note that while symbolic execution only works on Linux, without a
 fairly complex cross-compilation process, the brute force fuzzer works
 on macOS or (as far as we know) any Unix-like system.
 
-## A Note on MacOS and Forking
-
-Normally, when running a test for replay or fuzzing, DeepState forks
-in order to cleanly handle crashes of a test.  Unfortunately, `fork()`
-on macOS is _extremely_ slow.  When using the built-in fuzzer or
-replaying more than a few tests, it is highly recommended to add the `--no_fork`
-option on macOS, unless you need the added crash handling (that is,
-only when things aren't working without that option).
-
-## Fuzzing with libFuzzer
+### Fuzzing with libFuzzer
 
 If you install clang 6.0 or later, and run `cmake` when you install
 with the `BUILD_LIBFUZZER` environment variable defined, you can
@@ -436,6 +375,95 @@ On any platform,
 you can see more about what DeepState under libFuzzer is doing by
 setting the `LIBFUZZER_LOUD` environment variable, and tell libFuzzer
 to stop upon finding a failing test using `LIBFUZZER_EXIT_ON_FAIL`.
+
+### Fuzzing with AFL
+
+DeepState can also be used with a file-based fuzzer (e.g. AFL).  There
+are a few steps to this.  First, compile DeepState itself with any
+needed instrumentation.  E.g., to use it with AFL, you will want to
+set the compilers to `afl-gcc` and `afl-g++` or `afl-clang` and
+`afl-clang++` when you `cmake` on your DeepState install:
+
+```
+CC=afl-clang CXX=afl-clang++ cmake ..
+```
+
+Since you may want to use other fuzzers, you might at this point want
+to do something like:
+
+```shell
+cp /usr/local/lib/libdeepstate.a /usr/local/lib/libdeepstate_AFL.a
+```
+
+You can then recompile DeepState with a "normal" compiler and use `-ldeepstate_AFL` when working with AFL.
+
+You can now utilize the `deepstate-afl` frontend executor to both compile instrumented harnesses with our AFL-instrumented static library:
+
+```shell
+deepstate-afl --compile_test OneOf.cpp
+```
+
+which will generate a binary called `out.afl` (unless specified otherwise with `--out_test_name`).
+You can now fuzz the binary using the same fuzzer executor as so:
+
+```shell
+mkdir seeds
+echo "ok" >& seeds/seed
+
+deepstate-afl -i seeds ./out.afl
+```
+
+This will start the usual AFL interface, which you can kill with `Ctrl+C`. Results are saved in
+a default `AFL_out` directory, which you can use to replay like so:
+
+```shell
+./OneOf --input_test_files_dir AFL_out/crashes
+./OneOf --input_test_files_dir AFL_out/queue
+```
+
+Finally, if an example has more than one test, you need to specify,
+with a fully qualified name (e.g.,
+`Arithmetic_InvertibleMultiplication_CanFail`), which test to run,
+using the `--input_which_test` flag to the binary.  By
+default, DeepState will run the last test defined.
+
+Because AFL and other file-based fuzzers only rely on the DeepState
+native test executable, they should (like DeepState's built-in simple
+fuzzer) work fine on macOS and other Unix-like OSes.  On macOS, you
+will want to consider doing the work to use [persistent mode](http://lcamtuf.blogspot.com/2015/06/new-in-afl-persistent-mode.html), or even
+running inside a VM, due to AFL (unless in persistent mode) relying
+extensively on
+forks, which are very slow on macOS.
+
+### Fuzzing with Eclipser
+
+[Eclipser](https://github.com/SoftSec-KAIST/Eclipser) is a powerful new fuzzer/grey-box concolic tool
+with some of the advantages of symbolic execution, but with more scalability.  DeepState supports Eclipser out of the box.  To use it, you just need to
+
+- Install Eclipser as instructed at https://github.com/SoftSec-KAIST/Eclipser (you'll need to be on Linux)
+- Set the `ECLIPSER_HOME` environment variable to where-ever you installed Eclipser (the root, above `build`)
+- Make sure you compile your DeepState native without any sanitizers (QEMU, used by Eclipser, doesn't like them)
+
+After that, you can use Eclipser like this:
+
+`deepstate-eclipser <binary> --timeout <how long to test> --output_test_dir <where to put generated tests>`
+
+In our experience, Eclipser is quite effective, often better than
+libFuzzer and sometimes better than AFL, despite having a much slower
+test throughput than either.
+
+### Which Fuzzer Should I Use?
+
+In fact, since DeepState supports libFuzzer, AFL, and Eclipser (and
+others), a natural question is "which is the best fuzzer?"  In
+general, it depends!  We suggest using them all, which DeepState makes
+easy.  libFuzzer is very fast, and sometimes the CMP breakdown it
+provides is very useful; however, it's often bad at finding longer
+paths where just covering nodes isn't helpful.  AFL is still an
+excellent general-purpose fuzzer, and often beats "improved" versions
+over a range of programs.  Finally, Eclipser has some tricks that let
+it get traction in some cases where you might think only symbolic
+execution (which wouldn't scale) could help.
 
 ## Test case reduction
 
@@ -512,96 +540,29 @@ settings, or even `--slowest` setting to try to reduce it further.
 
 Test case reduction should work on any OS.
 
-## Fuzzing with AFL
 
-DeepState can also be used with a file-based fuzzer (e.g. AFL).  There
-are a few steps to this.  First, compile DeepState itself with any
-needed instrumentation.  E.g., to use it with AFL, you will want to
-set the compilers to `afl-gcc` and `afl-g++` or `afl-clang` and
-`afl-clang++` when you `cmake` on your DeepState install:
+## Log Levels
 
-```
-CC=afl-clang CXX=afl-clang++ cmake ..
-```
+By default, DeepState is not very verbose about testing activity,
+other than failing tests.  The `--min_log_level` argument lowers the
+threshold for output, with 0 = `DEBUG`, 1 = `TRACE` (output from the
+tests, including from `printf`), 2 = INFO (DeepState messages, the default), 3 = `WARNING`,
+4 = `ERROR`, 5 = `EXTERNAL` (output from other programs such as
+libFuzzer), and 6 = `CRITICAL` messages.  Lowering the `min_log_level` can be very
+useful for understanding what a DeepState harness is actually doing;
+often, setting `--min_log_level 1` in either fuzzing or symbolic
+execution will give sufficient information to debug your test harness.
 
-Since you may want to use other fuzzers, you might at this point want
-to do something like:
 
-```shell
-cp /usr/local/lib/libdeepstate.a /usr/local/lib/libdeepstate_AFL.a
-```
+## A Note on MacOS and Forking
 
-You can then recompile DeepState with a "normal" compiler and use `-ldeepstate_AFL` when working with AFL.
+Normally, when running a test for replay or fuzzing, DeepState forks
+in order to cleanly handle crashes of a test.  Unfortunately, `fork()`
+on macOS is _extremely_ slow.  When using the built-in fuzzer or
+replaying more than a few tests, it is highly recommended to add the `--no_fork`
+option on macOS, unless you need the added crash handling (that is,
+only when things aren't working without that option).
 
-In either case, compile the DeepState
-test harness and any code it links to you want instrumented with the
-same AFL compiler, and link to an AFL-generated version of DeepState.  Finally, run the fuzzing via the
-interface to replay test files.  For example, to fuzz the `OneOf`
-example, if we were in the `deepstate/build/examples` directory, you
-would do something like:
-
-```shell
-afl-fuzz -d -i corpus -o afl_OneOf -- ./OneOf --input_test_file @@ --abort_on_fail--no_fork
-```
-
-where `corpus` contains at least one file to start fuzzing from.  The
-file needs to be smaller than the DeepState input size limit, but has
-few other limitations (for AFL it should also not cause test
-failure).  The `abort_on_fail` flag makes DeepState crashes and failed
-tests appear as crashes to the fuzzer.  There's no reason to run AFL
-tests with a fork for better crash reporting, so `--no_fork` avoids an
-extra fork.
-
-To replay the tests from AFL:
-
-```shell
-./OneOf --input_test_files_dir afl_OneOf/crashes
-./OneOf --input_test_files_dir afl_OneOf/queue
-```
-
-Finally, if an example has more than one test, you need to specify,
-with a fully qualified name (e.g.,
-`Arithmetic_InvertibleMultiplication_CanFail`), which test to run,
-using the `--input_which_test` flag to the binary.  By
-default, DeepState will run the last test defined.
-
-Because AFL and other file-based fuzzers only rely on the DeepState
-native test executable, they should (like DeepState's built-in simple
-fuzzer) work fine on macOS and other Unix-like OSes.  On macOS, you
-will want to consider doing the work to use [persistent mode](http://lcamtuf.blogspot.com/2015/06/new-in-afl-persistent-mode.html), or even
-running inside a VM, due to AFL (unless in persistent mode) relying
-extensively on
-forks, which are very slow on macOS.
-
-## Fuzzing with Eclipser
-
-[Eclipser](https://github.com/SoftSec-KAIST/Eclipser) is a powerful new fuzzer/grey-box concolic tool
-with some of the advantages of symbolic execution, but with more scalability.  DeepState supports Eclipser out of the box.  To use it, you just need to
-
-- Install Eclipser as instructed at https://github.com/SoftSec-KAIST/Eclipser (you'll need to be on Linux)
-- Set the `ECLIPSER_HOME` environment variable to where-ever you installed Eclipser (the root, above `build`)
-- Make sure you compile your DeepState native without any sanitizers (QEMU, used by Eclipser, doesn't like them)
-
-After that, you can use Eclipser like this:
-
-`deepstate-eclipser <binary> --timeout <how long to test> --output_test_dir <where to put generated tests>`
-
-In our experience, Eclipser is quite effective, often better than
-libFuzzer and sometimes better than AFL, despite having a much slower
-test throughput than either.
-
-## Which Fuzzer Should I Use?
-
-In fact, since DeepState supports libFuzzer, AFL, and Eclipser (and
-others), a natural question is "which is the best fuzzer?"  In
-general, it depends!  We suggest using them all, which DeepState makes
-easy.  libFuzzer is very fast, and sometimes the CMP breakdown it
-provides is very useful; however, it's often bad at finding longer
-paths where just covering nodes isn't helpful.  AFL is still an
-excellent general-purpose fuzzer, and often beats "improved" versions
-over a range of programs.  Finally, Eclipser has some tricks that let
-it get traction in some cases where you might think only symbolic
-execution (which wouldn't scale) could help.
 
 ## Contributing
 
